@@ -203,7 +203,11 @@ def main():
         kpis=kpis_html, cuerpo=cuerpo,
     )
 
-    salida = Path(__file__).parent / "index.html"
+    # Se publica en docs/ (raiz del repo) porque GitHub Pages solo sirve
+    # desde la raiz o desde /docs, no desde subcarpetas como dashboard/.
+    docs = Path(__file__).parent.parent / "docs"
+    docs.mkdir(exist_ok=True)
+    salida = docs / "index.html"
     salida.write_text(html, encoding="utf-8")
     print(f"OK -> {salida}  ({salida.stat().st_size/1024:.0f} KB)")
 
