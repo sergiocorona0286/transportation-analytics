@@ -1,0 +1,4 @@
+Modelo,AUC-ROC,Precision (tarde),Recall (tarde),F1 (tarde)
+Regresión Logística,0.6416,0.2357,0.537,0.3276
+Random Forest,0.6269,0.2504,0.3625,0.2962
+XGBoost,0.6446,0.2336,0.5638,0.3303

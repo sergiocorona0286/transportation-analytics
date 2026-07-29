@@ -1,0 +1,6 @@
+{
+  "auc_rf": 0.6269,
+  "mejor_auc": 0.6446,
+  "mejor_modelo": "XGBoost",
+  "pct_tarde": 16.1
+}

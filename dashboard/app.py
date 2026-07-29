@@ -18,6 +18,8 @@ sys.path.insert(0, str(Path(__file__).parent))
 import streamlit as st
 import data
 import figuras
+import data_ml
+import figuras_ml
 
 st.set_page_config(
     page_title="Ahorro en la red de transporte",
@@ -31,7 +33,13 @@ def cargar():
     return data.cargar_tablas()
 
 
+@st.cache_data
+def cargar_modelos_ml():
+    return data_ml.cargar_ml()
+
+
 tablas = cargar()
+ml = cargar_modelos_ml()
 oportunidades = tablas["oportunidades"]
 scorecard = tablas["scorecard"]
 rfp_top_lanes = tablas["rfp_top_lanes"]
@@ -111,9 +119,11 @@ st.markdown("")
 # Pestanas — una vista por tema, cada una cabe en pantalla
 # ---------------------------------------------------------------------------
 (tab_exec, tab_resumen, tab_rfp, tab_carriers, tab_parcel,
- tab_claims) = st.tabs([
+ tab_claims, tab_m1, tab_m2, tab_m3, tab_m4) = st.tabs([
     "Resumen ejecutivo", "Panorama", "Licitación", "Transportistas",
     "Paquetería → LTL", "Reclamaciones",
+    "🔮 Pronóstico", "💰 Predicción de costo", "⏱️ Riesgo de retraso",
+    "🚛 Segmentación",
 ])
 
 with tab_exec:
@@ -239,3 +249,140 @@ with tab_claims:
         "(Denied) se excluye por prudencia. Total: **1.12 M USD**."
     )
     st.plotly_chart(figuras.fig_claims(claims), width="stretch")
+
+
+# ---------------------------------------------------------------------------
+# Pestanas de MACHINE LEARNING (modelos predictivos, notebooks 04-07)
+# ---------------------------------------------------------------------------
+
+with tab_m1:
+    m1 = ml["m1"]
+    met = m1["metricas"]
+    st.markdown("#### Pronóstico del gasto de flete (series de tiempo)")
+    st.markdown(
+        "Modelo **Prophet** que aprende la tendencia y la estacionalidad del "
+        "gasto mensual para proyectarlo a 6 meses. Los puntos son el gasto real; "
+        "la línea, el pronóstico; la banda, el intervalo de confianza del 95%."
+    )
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Crecimiento histórico", f"{met['crecimiento_pct']:.1f}%",
+              "ene 2023 → jun 2026", delta_color="off")
+    c2.metric("Pico pronosticado", f"${met['pico_pronosticado']/1e6:.1f}M",
+              "verano 2026", delta_color="off")
+    c3.metric("Valle pronosticado", f"${met['valle_pronosticado']/1e6:.1f}M",
+              "fin de año", delta_color="off")
+    st.plotly_chart(figuras_ml.fig_pronostico(m1["serie"], m1["pronostico"]),
+                    width="stretch")
+    st.caption(
+        "El modelo captura la temporada alta de verano y la baja de invierno. "
+        "Útil para planeación presupuestal y negociación anticipada de tarifas."
+    )
+
+with tab_m2:
+    m2 = ml["m2"]
+    met = m2["metricas"]
+    st.markdown("#### Predicción del costo de un embarque (regresión)")
+    st.markdown(
+        "Modelo **Random Forest** que predice cuánto *debería* costar un embarque "
+        "según sus características. Comparando el costo real contra el predicho, "
+        "detecta **sobrecostos** (anomalías de facturación)."
+    )
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Precisión (R²)", f"{met['r2_rf']*100:.1f}%",
+              "varianza explicada", delta_color="off")
+    c2.metric("Error promedio", f"${met['mae_rf']:,.0f}",
+              "sobre ~$2,120 medio", delta_color="off")
+    c3.metric("Factor dominante", met["top_variable"],
+              f"{met['top_variable_pct']:.0f}% del peso", delta_color="off")
+
+    col_izq, col_der = st.columns(2)
+    with col_izq:
+        st.markdown("**Modelo lineal vs. Random Forest**")
+        st.plotly_chart(figuras_ml.fig_comparacion_r2(m2["comparacion"]),
+                        width="stretch")
+    with col_der:
+        st.markdown("**Qué variables determinan el costo**")
+        st.plotly_chart(figuras_ml.fig_importancia(m2["importancia"]),
+                        width="stretch")
+
+    st.markdown("**Predicho vs. real** (5,000 embarques de prueba)")
+    st.plotly_chart(figuras_ml.fig_scatter_pred(m2["scatter"]), width="stretch")
+
+    st.markdown("**Top anomalías de sobrecosto detectadas**")
+    st.markdown(
+        "Embarques cuyo costo real supera con mucho lo esperado. Los carriers "
+        "**C022 y C023** concentran los mayores sobrecostos."
+    )
+    st.dataframe(m2["anomalias"], width="stretch", hide_index=True)
+
+with tab_m3:
+    m3 = ml["m3"]
+    met = m3["metricas"]
+    st.markdown("#### Riesgo de retraso: una investigación honesta")
+    st.markdown(
+        "Se intentó predecir qué embarques llegarían tarde. El resultado es un "
+        "**hallazgo valioso, aunque el modelo no funcione**: se comparó con tres "
+        "algoritmos y ninguno superó el azar de forma significativa."
+    )
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Mejor AUC logrado", f"{met['mejor_auc']:.3f}",
+              f"{met['mejor_modelo']}", delta_color="off")
+    c2.metric("Referencia (azar)", "0.500", "un AUC ideal sería >0.9",
+              delta_color="off")
+    c3.metric("Embarques tarde", f"{met['pct_tarde']:.1f}%",
+              "clase a detectar", delta_color="off")
+
+    col_izq, col_der = st.columns(2)
+    with col_izq:
+        st.markdown("**Los tres modelos empatan (~0.63)**")
+        st.plotly_chart(figuras_ml.fig_comparacion_auc(m3["comparacion"]),
+                        width="stretch")
+    with col_der:
+        st.markdown("**Curva ROC del Random Forest**")
+        st.plotly_chart(figuras_ml.fig_roc(m3["roc"]), width="stretch")
+
+    st.info(
+        "**Conclusión:** que los tres modelos —del más simple al más potente— "
+        "converjan al mismo techo demuestra que el límite está en los **datos**, "
+        "no en el modelo. Para predecir retrasos, la empresa necesitaría capturar "
+        "variables hoy ausentes: clima, congestión aduanal, disponibilidad de "
+        "unidades. Un resultado negativo, bien diagnosticado, también es un hallazgo."
+    )
+
+with tab_m4:
+    m4 = ml["m4"]
+    met = m4["metricas"]
+    nombres = met["nombres_grupos"]
+    st.markdown("#### Segmentación de transportistas (clustering)")
+    st.markdown(
+        "Modelo **K-Means** que agrupa los 30 carriers en 4 perfiles según su "
+        "costo, confiabilidad y volumen. Permite una estrategia diferenciada por "
+        "grupo, sin analizar cada carrier por separado."
+    )
+    # Tarjetas con los nombres de los 4 grupos
+    cols = st.columns(4)
+    descrip = {
+        "3": "Los preferentes: mejor puntualidad y menor daño.",
+        "1": "Paquetería ligera: caro por kg, alto volumen.",
+        "0": "A vigilar: peor puntualidad de la red.",
+        "2": "Carga masiva: baratos por kg, muy pesados.",
+    }
+    orden_tarjetas = ["3", "1", "0", "2"]
+    for col, g in zip(cols, orden_tarjetas):
+        col.markdown(f"**{nombres[g]}**")
+        col.caption(descrip[g])
+
+    st.markdown("")
+    col_izq, col_der = st.columns([3, 2])
+    with col_izq:
+        st.markdown("**Los 4 grupos en el plano (PCA)**")
+        st.plotly_chart(
+            figuras_ml.fig_pca(m4["pca"], nombres), width="stretch")
+    with col_der:
+        st.markdown("**Elección del número de grupos**")
+        st.plotly_chart(
+            figuras_ml.fig_seleccion_k(m4["seleccion_k"]), width="stretch")
+
+    st.markdown("**Perfil de cada grupo** (más oscuro = valor más alto)")
+    st.plotly_chart(figuras_ml.fig_perfil_grupos(m4["resumen"]),
+                    width="stretch")

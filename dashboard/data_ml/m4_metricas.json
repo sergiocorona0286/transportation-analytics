@@ -1,0 +1,11 @@
+{
+  "n_carriers": 30,
+  "n_grupos": 4,
+  "var_explicada_pca": 66.0,
+  "nombres_grupos": {
+    "0": "Problemáticos / Baja confiabilidad",
+    "1": "Paquetería ligera (Parcel)",
+    "2": "Gigantes de carga pesada",
+    "3": "Núcleo confiable"
+  }
+}

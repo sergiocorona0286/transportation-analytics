@@ -1,0 +1,8 @@
+{
+  "r2_rf": 0.9418,
+  "mae_rf": 341.45,
+  "rmse_rf": 697.4,
+  "top_variable": "chargeable_weight_kg",
+  "top_variable_pct": 50.4,
+  "n_embarques": 219120
+}
