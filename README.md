@@ -14,8 +14,11 @@ manufacturera global. Red Estados Unidos–México–Canadá, seis modos de tran
 
 **USD 5.42M en ahorro anual identificado (1.17% del gasto de red)** — y tres oportunidades
 mayores descartadas por no resistir el escrutinio. El proyecto va del diagnóstico de calidad
-de datos hasta un caso de negocio cuantificado, priorizando cifras defendibles sobre cifras
-grandes.
+de datos hasta un caso de negocio cuantificado y cuatro modelos de machine learning,
+priorizando cifras defendibles sobre cifras grandes.
+
+**[Dashboard interactivo →](https://sergiocorona0286.github.io/transportation-analytics/)**
+Análisis de negocio + modelos predictivos, con gráficas interactivas.
 
 El resultado se presenta por **nivel de confianza**, no como un número monolítico:
 
@@ -34,8 +37,9 @@ El resultado se presenta por **nivel de confianza**, no como un número monolít
 | 1 | Diagnóstico de calidad | Completo |
 | 2 | Pipeline de limpieza y validación | Completo |
 | 3 | Análisis exploratorio y de negocio | Completo |
-| 4 | Vistas SQL — KPI y carrier scorecard | Pendiente |
-| 5 | Dashboard Power BI | Pendiente |
+| 4 | Modelos de machine learning (4 módulos) | Completo |
+| 5 | Dashboard interactivo (Streamlit + HTML) | Completo |
+| 6 | Vistas SQL — KPI y carrier scorecard | Pendiente |
 
 ---
 
@@ -127,16 +131,75 @@ tablero construido sin esa regla contradiría los reportes del área de transpor
 
 ---
 
+## Modelos de machine learning
+
+Sobre la base de datos limpia, cuatro modelos cubren las grandes ramas del aprendizaje
+automático aplicado. Cada uno se documenta con su metodología, la justificación de por qué
+se eligió esa técnica y no otra, y su interpretación de negocio.
+
+**1. Pronóstico del gasto de flete — series de tiempo (Prophet).**
+Proyecta el gasto mensual a 6 meses capturando tendencia y estacionalidad. La serie muestra
+crecimiento sostenido (+189% en el periodo) y un patrón anual claro: temporada alta en verano,
+baja al inicio del año. Se eligió Prophet sobre ARIMA/Holt-Winters por su manejo explícito de
+estacionalidad y sus intervalos de confianza interpretables. Se documenta un ligero
+sobreajuste estacional en lugar de ocultarlo. *Notebook 04.*
+
+**2. Predicción del costo de embarque — regresión (Random Forest).**
+Predice el costo esperado de un embarque con **R² = 0.94** y error promedio de USD 341. El
+baseline lineal falló (R² negativo, hundido por outliers), lo que justificó el modelo no
+lineal. La importancia de variables revela que peso cobrable (50%) y distancia (25%) dominan
+el costo. Aplicado como **detector de anomalías**: comparando costo real vs. predicho, señala
+sobrecostos concentrados en dos carriers (C022, C023). *Notebook 05.*
+
+**3. Riesgo de retraso — clasificación (investigación de sus límites).**
+Un resultado negativo, correctamente diagnosticado. Ningún modelo (Regresión Logística,
+Random Forest, XGBoost) superó un AUC de ~0.64. En vez de inflar el resultado, se demostró
+con rigor que **el límite está en los datos, no en el modelo**: que los tres algoritmos
+converjan al mismo techo prueba que faltan variables predictivas (clima, congestión aduanal,
+disponibilidad de unidades). El hallazgo se traduce en una recomendación de captura de datos.
+*Notebook 06.*
+
+**4. Segmentación de transportistas — clustering (K-Means).**
+Agrupa los 30 carriers en 4 perfiles estratégicos según costo, confiabilidad y volumen. El
+número de grupos se eligió balanceando criterio estadístico (método del codo, silueta) con
+utilidad de negocio: K=4 sobre el K=8 que sugería la silueta, porque sobre-segmentar 30
+carriers no es accionable. Los grupos emergen nítidos: núcleo confiable, paquetería ligera,
+gigantes de carga pesada y un grupo problemático de baja puntualidad. *Notebook 07.*
+
+---
+
+## Dashboard
+
+Dos presentaciones desde una única capa de datos, sin re-entrenar modelos: los notebooks
+exportan resultados ligeros (CSV/JSON, ~150 KB) que ambas vistas consumen.
+
+- **Interactivo (Streamlit):** diez pestañas —seis de negocio, cuatro de ML— con filtros.
+- **Estático (GitHub Pages):** página autocontenida con gráficas Plotly, siempre encendida.
+  [Ver en vivo →](https://sergiocorona0286.github.io/transportation-analytics/)
+
+---
+
 ## Estructura
 
     transportation-analytics/
     ├── notebooks/
     │   ├── 01_exploracion_calidad.ipynb     Diagnóstico y cinco hallazgos
     │   ├── 02_pipeline_limpieza.ipynb       Implementación y validación
-    │   └── 03_analisis_negocio.ipynb        Análisis de negocio y caso cuantificado
+    │   ├── 03_analisis_negocio.ipynb        Análisis de negocio y caso cuantificado
+    │   ├── 04_pronostico_series.ipynb       ML: pronóstico con Prophet
+    │   ├── 05_regresion_costo.ipynb         ML: regresión y detección de anomalías
+    │   ├── 06_clasificacion_riesgo.ipynb    ML: clasificación e investigación de límites
+    │   └── 07_segmentacion_carriers.ipynb   ML: clustering K-Means
+    ├── dashboard/
+    │   ├── app.py                            App Streamlit (10 pestañas)
+    │   ├── data.py, figuras.py               Capa de negocio
+    │   ├── data_ml.py, figuras_ml.py         Capa de machine learning
+    │   ├── exportar_html.py                  Generador del HTML estático
+    │   └── data_ml/                          Resultados ML exportados
     ├── src/
     │   └── limpieza.py                       Clase LimpiadorEmbarques
-    ├── sql/                                  Vistas de KPI (fase 4)
+    ├── docs/                                 HTML publicado (GitHub Pages)
+    ├── sql/                                  Vistas de KPI (fase 6)
     └── data/                                 No versionado
 
 ---
@@ -205,10 +268,15 @@ criterio, documentada en lugar de resuelta ajustando el umbral.
     pip install -r requirements.txt
     jupyter notebook
 
+Para el dashboard interactivo, desde la raíz del proyecto:
+
+    streamlit run dashboard\app.py
+
 Los archivos de datos no están versionados. El pipeline espera encontrarlos en `data/raw/`.
 
 ---
 
 ## Herramientas
 
-Python 3.14 · pandas 3.0 · NumPy · Plotly · Jupyter · Git
+Python 3.12 · pandas · NumPy · scikit-learn · Prophet · XGBoost · Plotly ·
+Streamlit · Jupyter · Git
