@@ -22,6 +22,8 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 import data
 import figuras
+import data_ml
+import figuras_ml
 
 AZUL_OSCURO = "#1F4E66"
 AZUL_MEDIO = "#4E8CA8"
@@ -130,6 +132,121 @@ RESUMEN_EJECUTIVO = """
     </section>"""
 
 
+def tabla_html(df):
+    """Convierte un DataFrame a una tabla HTML simple con estilo del dashboard."""
+    return df.to_html(index=False, border=0, classes="tabla-datos",
+                      escape=False)
+
+
+def bloque_ml():
+    """Construye las 4 secciones de machine learning para el HTML estatico."""
+    ml = data_ml.cargar_ml()
+
+    # --- Modulo 1: Pronostico ---
+    m1 = ml["m1"]
+    met1 = m1["metricas"]
+    div_pron = fig_div(figuras_ml.fig_pronostico(m1["serie"], m1["pronostico"]))
+    kpis_m1 = f"""
+      <div class="kpi-row">
+        {kpi("Crecimiento histórico", f"{met1['crecimiento_pct']:.1f}%", "ene 2023 → jun 2026")}
+        {kpi("Pico pronosticado", f"${met1['pico_pronosticado']/1e6:.1f}M", "verano 2026")}
+        {kpi("Valle pronosticado", f"${met1['valle_pronosticado']/1e6:.1f}M", "fin de año")}
+      </div>"""
+    sec_m1 = seccion(
+        "🔮 Pronóstico del gasto de flete (series de tiempo)",
+        "Modelo <b>Prophet</b> que aprende la tendencia y la estacionalidad del "
+        "gasto mensual para proyectarlo a 6 meses. Los puntos son el gasto real; "
+        "la línea, el pronóstico; la banda, el intervalo de confianza del 95%.",
+        kpis_m1 + f'<div class="chart">{div_pron}</div>',
+        "Captura la temporada alta de verano y la baja de invierno. Útil para "
+        "planeación presupuestal y negociación anticipada de tarifas.",
+    )
+
+    # --- Modulo 2: Regresion ---
+    m2 = ml["m2"]
+    met2 = m2["metricas"]
+    div_r2 = fig_div(figuras_ml.fig_comparacion_r2(m2["comparacion"]))
+    div_imp = fig_div(figuras_ml.fig_importancia(m2["importancia"]))
+    div_scatter = fig_div(figuras_ml.fig_scatter_pred(m2["scatter"]))
+    kpis_m2 = f"""
+      <div class="kpi-row">
+        {kpi("Precisión (R²)", f"{met2['r2_rf']*100:.1f}%", "varianza explicada")}
+        {kpi("Error promedio", f"${met2['mae_rf']:,.0f}", "sobre ~$2,120 medio")}
+        {kpi("Factor dominante", met2["top_variable"], f"{met2['top_variable_pct']:.0f}% del peso")}
+      </div>"""
+    sec_m2 = seccion(
+        "💰 Predicción del costo de un embarque (regresión)",
+        "Modelo <b>Random Forest</b> que predice cuánto <i>debería</i> costar un "
+        "embarque. Comparando costo real vs. predicho, detecta <b>sobrecostos</b> "
+        "(anomalías de facturación).",
+        kpis_m2
+        + f'<div class="chart">{div_r2}</div>'
+        + f'<div class="chart">{div_imp}</div>'
+        + f'<div class="chart">{div_scatter}</div>'
+        + "<h3 class='sub-ml'>Top anomalías de sobrecosto detectadas</h3>"
+        + tabla_html(m2["anomalias"]),
+        "Los carriers C022 y C023 concentran los mayores sobrecostos.",
+    )
+
+    # --- Modulo 3: Clasificacion ---
+    m3 = ml["m3"]
+    met3 = m3["metricas"]
+    div_auc = fig_div(figuras_ml.fig_comparacion_auc(m3["comparacion"]))
+    div_roc = fig_div(figuras_ml.fig_roc(m3["roc"]))
+    kpis_m3 = f"""
+      <div class="kpi-row">
+        {kpi("Mejor AUC logrado", f"{met3['mejor_auc']:.3f}", met3["mejor_modelo"])}
+        {kpi("Referencia (azar)", "0.500", "un AUC ideal sería >0.9")}
+        {kpi("Embarques tarde", f"{met3['pct_tarde']:.1f}%", "clase a detectar")}
+      </div>"""
+    sec_m3 = seccion(
+        "⏱️ Riesgo de retraso: una investigación honesta",
+        "Se intentó predecir qué embarques llegarían tarde. El resultado es un "
+        "<b>hallazgo valioso aunque el modelo no funcione</b>: se probaron tres "
+        "algoritmos y ninguno superó el azar de forma significativa.",
+        kpis_m3
+        + f'<div class="chart">{div_auc}</div>'
+        + f'<div class="chart">{div_roc}</div>'
+        + '<p class="nota-ml"><b>Conclusión:</b> que los tres modelos —del más '
+        "simple al más potente— converjan al mismo techo demuestra que el límite "
+        "está en los <b>datos</b>, no en el modelo. Para predecir retrasos, la "
+        "empresa necesitaría capturar variables hoy ausentes: clima, congestión "
+        "aduanal, disponibilidad de unidades. Un resultado negativo, bien "
+        "diagnosticado, también es un hallazgo.</p>",
+    )
+
+    # --- Modulo 4: Segmentacion ---
+    m4 = ml["m4"]
+    met4 = m4["metricas"]
+    nombres = met4["nombres_grupos"]
+    div_pca = fig_div(figuras_ml.fig_pca(m4["pca"], nombres))
+    div_selk = fig_div(figuras_ml.fig_seleccion_k(m4["seleccion_k"]))
+    div_perfil = fig_div(figuras_ml.fig_perfil_grupos(m4["resumen"]))
+    sec_m4 = seccion(
+        "🚛 Segmentación de transportistas (clustering)",
+        "Modelo <b>K-Means</b> que agrupa los 30 carriers en 4 perfiles según "
+        "costo, confiabilidad y volumen. Permite una estrategia diferenciada por "
+        "grupo sin analizar cada carrier por separado.",
+        f'<div class="chart">{div_pca}</div>'
+        + f'<div class="chart">{div_selk}</div>'
+        + "<h3 class='sub-ml'>Perfil de cada grupo (más oscuro = valor más alto)</h3>"
+        + f'<div class="chart">{div_perfil}</div>',
+        f"Los 4 grupos: {nombres['3']}, {nombres['1']}, "
+        f"{nombres['0']}, {nombres['2']}.",
+    )
+
+    separador = """
+    <section class="divisor-ml">
+      <h2>Modelos predictivos (machine learning)</h2>
+      <p class="intro">Más allá del análisis descriptivo, se construyeron cuatro
+      modelos de machine learning que cubren las grandes ramas del aprendizaje
+      automático: pronóstico, regresión, clasificación y segmentación. Cada uno
+      documentado con su metodología, resultados e interpretación de negocio.</p>
+    </section>"""
+
+    return separador + sec_m1 + sec_m2 + sec_m3 + sec_m4
+
+
 def main():
     t = data.cargar_tablas()
     k = data.kpis_titulares(t["oportunidades"])
@@ -195,10 +312,10 @@ def main():
             "negado (Denied) se excluye por prudencia. Total: 1.12 M USD.",
             f'<div class="chart">{div_claims}</div>',
         ),
-    ])
+    ]) + bloque_ml()
 
     html = PLANTILLA.format(
-        azul=AZUL_OSCURO, azul_medio=AZUL_MEDIO, gris=GRIS_TXT,
+        azul=AZUL_OSCURO, azul_medio=AZUL_MEDIO, arena=ARENA, gris=GRIS_TXT,
         gris_suave=GRIS_SUAVE, resumen=RESUMEN_EJECUTIVO,
         kpis=kpis_html, cuerpo=cuerpo,
     )
@@ -246,6 +363,16 @@ PLANTILLA = """<!DOCTYPE html>
   p.caption {{ color: {gris_suave}; font-size: 13px; font-style: italic;
     margin: 12px 0 0; }}
   .chart {{ width: 100%; }}
+  section.divisor-ml {{ border-left: 4px solid {arena}; background: #fdfbf7; }}
+  h3.sub-ml {{ color: {azul_medio}; font-size: 16px; margin: 22px 0 8px; }}
+  p.nota-ml {{ background: #f0f5f8; border-left: 3px solid {azul_medio};
+    padding: 14px 16px; border-radius: 6px; font-size: 14px; margin: 16px 0 0; }}
+  table.tabla-datos {{ width: 100%; border-collapse: collapse; font-size: 13px;
+    margin: 8px 0; }}
+  table.tabla-datos th {{ background: {azul}; color: #fff; text-align: left;
+    padding: 8px 10px; font-weight: normal; }}
+  table.tabla-datos td {{ padding: 7px 10px; border-bottom: 1px solid #eee; }}
+  table.tabla-datos tr:nth-child(even) {{ background: #f7f9fb; }}
   footer {{ color: {gris_suave}; font-size: 12px; margin-top: 32px;
     text-align: center; }}
   footer a {{ color: {azul_medio}; }}
